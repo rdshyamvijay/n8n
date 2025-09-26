@@ -1,0 +1,342 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messages[0].text.body }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are [Company Name]’s real-time website assistant for https://www.your-company-url.com.\n\nAVAILABLE TOOLS\n• list_links(url) → { urls:[ … ] }  — returns up to 100 internal links from that page  \n• get_page(url)   → { text:\"…\" }    — returns the visible, tag-free text of the page (JavaScript rendered if needed)\n\nSEARCH STRATEGY\n1. Start with list_links on the root page.  \n2. Pick ≤ 5 links whose URL or anchor text best match the user’s question (producto, pago, envío, servicio, política, etc.).  \n3. For each chosen link call get_page once.  \n4. Read the returned text and look for the answer.  \n5. If the answer is still unknown, you may repeat steps 1-4 one level deeper.  \n6. Stop after two list_links rounds **or** eight get_page calls (whichever comes first).\n\nANSWER RULES\n• Reply in clear and friendly toon **as part of [Company Name]** (use “we”, “our”).  \n• Keep answers concise but complete.  \n• **No Markdown ni símbolos de formato. Nunca uses \\*, **, \\_, \\~, ni [texto](url).**  \n  Write urls like: Descriptive Text ␣URL   Ej.: Combos https://…  \n• Quote the exact wording for facts such as stock status, prices, envíos, métodos de pago, garantías o políticas.  \n• If the information is not on the site, reply exactly:  \n  “I can't find that information on our site right now. Do you want me to put you through to a human agent?”  \n• Stay on-domain; ignore mailto:, tel:, javascript:, or off-site links.\n• Finally, if any of the tools returns a status code 404, then reply:\n\"Non-subscribed user.\"",
+          "maxIterations": 10,
+          "returnIntermediateSteps": true
+        }
+      },
+      "id": "35de579c-32fe-471f-8876-3984b00b3b63",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "maxTries": 5,
+      "position": [
+        1040,
+        464
+      ],
+      "retryOnFail": false,
+      "typeVersion": 1.7,
+      "alwaysOutputData": true,
+      "waitBetweenTries": null
+    },
+    {
+      "parameters": {
+        "toolDescription": "Returns up to 100 unique, fully-qualified INTERNAL links for a given page.\n\nInput  (JSON body the model must supply)\n  {\n    \"url\": \"<absolute https://…>\"\n  }\n\nBehaviour\n  • Crawls only the domain of the input URL.\n  • Converts relative <a href> values to absolute URLs.\n  • Drops empty roots (\"/\"), mailto:, tel:, javascript:, and off-site links.\n  • De-duplicates the list.\n  • Responds with a JSON object:\n\n      {\n        \"urls\": [ \"<link-1>\", \"<link-2>\", … ]\n      }\n\nUse this tool when you need a navigation map of the current page.\nPass one of the returned URLs back into other tools (e.g. get_text) to read its content.\n",
+        "method": "POST",
+        "url": "https://lemolex.app.n8n.cloud/webhook/list-links",
+        "sendBody": true,
+        "parametersBody": {
+          "values": [
+            {
+              "name": "url",
+              "valueProvider": "fieldValue",
+              "value": "https://www.your-company-url.com"
+            },
+            {
+              "name": "auth-token",
+              "valueProvider": "fieldValue",
+              "value": "your-auth-token (read setup guide)"
+            }
+          ]
+        }
+      },
+      "id": "d64a1a82-d963-4997-9494-d20c2ea845c0",
+      "name": "list_links",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "position": [
+        1184,
+        752
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "424679c5-ce1c-4b1f-b8d6-62064cd67b97",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        960,
+        672
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "id": "dcea8555-020b-495c-94be-87cc47fac68f",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "position": [
+        672,
+        464
+      ],
+      "webhookId": "857366e8-7b6f-45a7-bbd1-f876002620d7",
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "// cleanAnswer – run once per item\nlet txt = $('AI Agent').first().json.output || '';\n\n// 1. Remove bold / italic / strike markers\ntxt = txt.replace(/[*_~]+/g, '');\n\n// 2. Convert [Texto](https://url) → Texto https://url\ntxt = txt.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g, '$1 $2');\n\n// 3. Collapse 3+ blank lines\ntxt = txt.replace(/\\n{3,}/g, '\\n\\n').trim();\n\nreturn [{ json: { answer: txt } }];\n"
+      },
+      "id": "44239486-2f44-4ba1-a441-362c845489fb",
+      "name": "cleanAnswer",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1968,
+        448
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetches the fully-rendered **plain text** of a single web.  \n• Input  : { \"url\": \"<absolute https://…>\" }  \n• Auth   : token is sent as HTTP basic-auth.  \n• Query  : url=<encoded url>  \n• Output : { \"text\": \"<visible text of the body>\", \"url\": \"<same url>\" }  \n• The \"text\" field already has **all HTML tags removed** .  \n• Use this tool whenever you need the actual words that appear on the page—product details, prices, stock lines, shipping terms, payment options, company policies, etc.  \n• Do **not** call it on off-site links or mailto:/tel:/javascript: pseudo-links.  \n",
+        "method": "POST",
+        "url": "https://lemolex.app.n8n.cloud/webhook/get_text",
+        "sendBody": true,
+        "parametersBody": {
+          "values": [
+            {
+              "name": "url"
+            },
+            {
+              "name": "auth-token",
+              "valueProvider": "fieldValue",
+              "value": "your-auth-token (read setup guide)"
+            }
+          ]
+        }
+      },
+      "id": "dcd18396-1fdb-464d-a183-27c2833633cc",
+      "name": "get_page",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "position": [
+        1344,
+        752
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "jsCode": "// within24h?  – run once per item\n// Meta (WhatsApp) timestamp arrives as seconds since epoch\nconst lastTs = Number($('WhatsApp Trigger').first().json.messages[0].timestamp) * 1000;   // → ms\nconst withinWindow = Date.now() - lastTs < 24 * 60 * 60 * 1000;\n\nreturn [{ json: { withinWindow, answer: $json.answer, userId: $json.userId } }];"
+      },
+      "id": "e07c0719-cf94-4b78-81e5-e24cba4a4a4a",
+      "name": "24-hour window check",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1440,
+        464
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "d33e218e-a49a-49ed-9c6b-55b9ea0b0dbb",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.withinWindow }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e3879501-be70-4d26-8f32-32629cc9d716",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        1664,
+        464
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "phoneNumberId": "679436108574898",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "template": "hello_world|en_US"
+      },
+      "id": "06e08733-2070-4204-95f7-98685db4694b",
+      "name": "Send Pre-approved Template Message to Reopen the Conversation",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        1984,
+        688
+      ],
+      "typeVersion": 1,
+      "webhookId": "d1ab9bc2-fb7b-438c-9c0f-460638b33888"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "679436108574898",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "textBody": "={{ $json.answer }}",
+        "additionalFields": {}
+      },
+      "id": "8dbb9b64-c896-48fb-ac1a-0218d7163abf",
+      "name": "Send AI Agent's Answer",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        2192,
+        448
+      ],
+      "typeVersion": 1,
+      "webhookId": "94dc6892-1c43-42f7-b85c-dc984e7e6e31"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.contacts[0].wa_id }}",
+        "tableName": "message_history"
+      },
+      "id": "b1bd0488-87ab-4dfe-95fd-09a9be8eb6c0",
+      "name": "Postgres Users Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "position": [
+        1040,
+        832
+      ],
+      "typeVersion": 1.3
+    }
+  ],
+  "connections": {
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "24-hour window check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_links": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cleanAnswer": {
+      "main": [
+        [
+          {
+            "node": "Send AI Agent's Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_page": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24-hour window check": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "cleanAnswer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Pre-approved Template Message to Reopen the Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Users Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "cc91504282bdfd6a33a449dbdd5f86c61a0b296df5a7a9b5f7a9386476f5a3ea"
+  }
+}
