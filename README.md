@@ -4,7 +4,7 @@ This repository contains a curated collection of **n8n automation workflows** (N
 
 Each workflow is organized into its own folder, with:
 
-- A `workflow.json` file that you can directly import into your n8n instance
+- A `(workflow_name).json` file that you can directly import into your n8n instance
 - A `README.md` explaining the logic, configuration steps, and usage instructions in plain language
 
 ---
@@ -17,16 +17,6 @@ Each workflow is organized into its own folder, with:
 4. Set up any required API credentials or integrations as described.
 
 Each workflow is modular and fully customizable.
-
----
-
-## Why NAT?
-
-**NAT** stands for **n8n Automated Templates** — these are real, production-ready flows built to solve practical problems using low-code automation. The goal is to help others:
-
-- Save time building from scratch
-- Learn how to design complex automations
-- Get inspired by real-world automation examples
 
 ---
 
