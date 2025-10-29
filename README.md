@@ -1,4 +1,4 @@
-# NAT (n8n Automated Templates)
+# N8N automation workflows
 
 This repository contains a curated collection of **n8n automation workflows** (NAT) built for real-world use cases — ranging from social media management to lead generation, content automation, notifications, and more.
 
